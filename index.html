@@ -4,15 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CyberSpace Arena</title>
-    <style>
-        body{
-            margin : 0px;
-            background-color: black;
-        }
-    </style>
+    <link href="style.css" rel="stylesheet" >
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400..900&family=Press+Start+2P&display=swap" rel="stylesheet">
 </head>
 <body>
     <canvas></canvas>
     <script src="script.js"></script>
+    <div class="display-data">
+        <span id="plHealth">Player's Health : 100 </span>
+        <span id="sysHealth">System's Health : 50 </span>
+        <span id="noOfKeys">Keys : 0 </span>
+        <span id="shards">Shards : 0 </span>
+        <span id="shardsDel"> Shards Delivered :0 </span>
+    </div>
+    <div class="btn-container">
+        <button class="btn" id="Pause">Pause</button>
+        <button class="btn" id="Resume">Resume</button>
+        <button class="btn" id="Reset">Reset</button>
+    </div>
 </body>
 </html>
