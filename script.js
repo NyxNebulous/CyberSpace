@@ -27,7 +27,6 @@ window.addEventListener("DOMContentLoaded", () => {
 
     let systemHealth = 51;
     const player = { x: tileSize * 2, y: tileSize * 2, size: 12, color: "white", noOfKeys: 0, shards: 0, health: 100, shardsDel: 0 };
-    const bot = { x: X * tileSize, y: Y * tileSize, size: 10, color: "yellow", speed: 1 };
     let buildings = [];
     let towers = [];
     let bullets = [];
@@ -229,7 +228,6 @@ window.addEventListener("DOMContentLoaded", () => {
 
     }
 
-
     class Key {
         constructor(index) {
 
@@ -389,26 +387,14 @@ window.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-
-    function drawMap() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    function generateMap() {
         for (let i = 0; i < canvas.width; i += tileSize) {
-            drawGrid(i);
             let row = [];
             for (let j = 0; j < canvas.height; j += tileSize) {
-                let color;
-                if (i / tileSize == X && j / tileSize == Y) {
-                    color = "cyan";
-                } else {
-                    color = gridColor;
-                }
-
                 const gardenX = i + gap;
                 const gardenY = j + gap;
                 const centerX = i + tileSize / 2;
                 const centerY = j + tileSize / 2;
-
-                drawGarden(gardenX, gardenY, color);
 
                 const a1 = Math.random() * Math.PI * 2;
                 const a2 = a1 + Math.PI / 3;
@@ -419,7 +405,6 @@ window.addEventListener("DOMContentLoaded", () => {
                     const tower = new Towers(centerX, centerY, arcRad, a1, a2);
                     tower.gridX = i / tileSize;
                     tower.gridY = j / tileSize;
-                    tower.draw(ctx);
                     towers.push(tower);
                 }
 
@@ -429,17 +414,8 @@ window.addEventListener("DOMContentLoaded", () => {
 
                 buildingsInGarden.push({ x: centerX - unit / 2, y: centerY - unit / 2, size: unit, hit: 0, destroyed: false, color: "rgb(0, 0, 0)" })
                 for (let k = 0; k < 5; k++) {
-                    const a = Math.floor(Math.random() * 256);
-                    const b = Math.floor(Math.random() * 256);
-                    const c = Math.floor(Math.random() * 256);
                     const bx = gardenX + Math.random() * (gardenSize - unit);
                     const by = gardenY + Math.random() * (gardenSize - unit);
-                    ctx.fillStyle = `rgba(0,0,0,0.95)`;
-                    ctx.fillRect(bx, by, unit, unit);
-
-                    ctx.strokeStyle = 'rgb(0, 213, 255)';
-                    ctx.lineWidth = 1.5;
-                    ctx.strokeRect(bx, by, unit, unit);
 
                     buildingsInGarden.push({ x: bx, y: by, size: unit, hit: 0, destroyed: false, color: `rgba(0, 0, 0, 0.95)` });
                 }
@@ -450,13 +426,11 @@ window.addEventListener("DOMContentLoaded", () => {
 
         for (let i = 0; i < 54; i++) {
             const key = new Key(i);
-            key.draw();
             keys.push({ key: key, captured: false });
         }
 
         for (let i = 0; i < 3; i++) {
             const bot = new Bot(canvas.width, canvas.height);
-            bot.draw();
             bots.push(bot);
         }
         for (let i = 0; i < 5; i++) {
@@ -474,7 +448,6 @@ window.addEventListener("DOMContentLoaded", () => {
     function drawGrid(pos) {
         ctx.lineWidth = 40;
         ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
-        // ctx.setLineDash([22, 26]);
 
         ctx.beginPath();
         ctx.moveTo(0, pos);
@@ -485,8 +458,6 @@ window.addEventListener("DOMContentLoaded", () => {
         ctx.moveTo(pos, 0);
         ctx.lineTo(pos, canvas.height);
         ctx.stroke();
-
-        // ctx.setLineDash([]);
     }
 
     function drawGarden(x, y, color, base = false, hub = false) {
@@ -537,21 +508,35 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     function drawSaved() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const camRight = camera.x + camera.width;
+        const camBottom = camera.y + camera.height;
+
         for (let i = 0; i < canvas.width; i += tileSize) {
             drawGrid(i);
             for (let j = 0; j < canvas.height; j += tileSize) {
                 const color = (i / tileSize == X && j / tileSize == Y) ? "cyan" : (i / tileSize == hubX && j / tileSize == hubY) ? "rgb(166, 0, 255)" : gridColor;
                 const gardenX = i + gap;
                 const gardenY = j + gap;
+                if (
+                    gardenX + tileSize < camera.x ||
+                    gardenX > camRight ||
+                    gardenY + tileSize < camera.y ||
+                    gardenY > camBottom
+                ) continue;
                 drawGarden(gardenX, gardenY, color);
             }
         }
 
-
         for (let i = 0; i < buildings.length; i++) {
             for (let j = 0; j < buildings[i].length; j++) {
                 for (const building of buildings[i][j]) {
+                    if (
+                        building.x + building.size < camera.x ||
+                        building.x > camRight ||
+                        building.y + building.size < camera.y ||
+                        building.y > camBottom
+                    ) continue;
+
                     if (building.hit < 8) {
                         ctx.fillStyle = `rgba(0,0,0,0.95)`;
                         ctx.fillRect(building.x, building.y, building.size, building.size);
@@ -575,9 +560,9 @@ window.addEventListener("DOMContentLoaded", () => {
                             ctx.lineTo(building.x + building.size, building.y + i * cellSize);
                             ctx.stroke();
                         }
-
+                    } else {
+                        building.destroyed = true;
                     }
-                    else building.destroyed = true;
                 }
             }
         }
@@ -585,10 +570,16 @@ window.addEventListener("DOMContentLoaded", () => {
         drawGarden(X * tileSize, Y * tileSize, "blue", true, false);
         drawGarden(hubX * tileSize, hubY * tileSize, "purple", false, true);
 
-        towers.forEach(arc => {             // Doubt : Why is this even neccessary??
-            if (arc.destroyed) {
-                return;
-            }
+        towers.forEach(arc => {
+            if (arc.destroyed) return;
+
+            if (
+                arc.x + arc.r < camera.x ||
+                arc.x - arc.r > camRight ||
+                arc.y + arc.r < camera.y ||
+                arc.y - arc.r > camBottom
+            ) return;
+
             ctx.beginPath();
             ctx.moveTo(arc.x, arc.y);
             ctx.arc(arc.x, arc.y, arc.r, arc.a1, arc.a2, false);
@@ -600,38 +591,43 @@ window.addEventListener("DOMContentLoaded", () => {
             ctx.stroke();
         });
 
-        keys.forEach((element) => {
+        keys.forEach(element => {
             if (element.captured) return;
+            if (
+                Math.abs(element.key.x - player.x) > camera.width / 1.5 ||
+                Math.abs(element.key.y - player.y) > camera.height / 1.5
+            ) return;
+
             element.key.draw();
             element.key.capture();
         });
 
-        bots.forEach((element) => {
-            element.draw();
-            element.move();
-        });
-
-        healthPacks.forEach((element) => {
-            if (!element.collected) {
+        healthPacks.forEach(element => {
+            if (!element.collected &&
+                Math.abs(element.pack.x - player.x) < camera.width / 1.5 &&
+                Math.abs(element.pack.y - player.y) < camera.height / 1.5
+            ) {
                 element.pack.draw();
-                if (element.pack.collect()) {
-                    element.collected = true;
-                }
+                if (element.pack.collect()) element.collected = true;
             }
         });
 
-        shields.forEach((element) => {
-            if (!element.collected) {
+        shields.forEach(element => {
+            if (!element.collected &&
+                Math.abs(element.shield.x - player.x) < camera.width / 1.5 &&
+                Math.abs(element.shield.y - player.y) < camera.height / 1.5
+            ) {
                 element.shield.draw();
-                if (element.shield.collect()) {
-                    element.collected = true;
-                }
+                if (element.shield.collect()) element.collected = true;
             }
         });
 
+        bots.forEach(bot => {
+            bot.draw();
+            bot.move();
+        });
 
     }
-
 
     function drawPlayer() {
 
@@ -783,7 +779,6 @@ window.addEventListener("DOMContentLoaded", () => {
         camera.y = Math.max(0, Math.min(camera.y, canvas.height - camera.height));
     }
 
-
     function animate() {
         requestAnimationFrame(animate);
         if (isPaused) return;
@@ -833,9 +828,8 @@ window.addEventListener("DOMContentLoaded", () => {
         ctx.restore();
     }
 
-    drawMap();
+    generateMap();
     animate();
-    drawPlayer();
 
 
     window.addEventListener("keydown", (e) => {
