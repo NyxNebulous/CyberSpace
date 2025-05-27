@@ -6,7 +6,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const gap = 35;
     const gridColor = "rgba(17, 255, 0, 0.91)";
     const gardenSize = tileSize - 2 * gap;
-    const arcRad = gardenSize / 1.20;
+    const arcRad = gardenSize / 1.15;
     const keysPressed = {};
     let camera = { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
 
@@ -41,6 +41,20 @@ window.addEventListener("DOMContentLoaded", () => {
         localStorage.setItem("highScore", "0");
     }
 
+    const constructionIcon = new Image();
+    constructionIcon.src = "Assets/construction.png";
+
+    const shieldIcon = new Image();
+    shieldIcon.src = "Assets/shield.png";
+
+    const healIcon = new Image();
+    healIcon.src = "Assets/first-aid.png";
+
+    const keyIcon = new Image();
+    keyIcon.src = "Assets/crystal.png";
+
+    const shieldSound = new Audio("Assets/shields.mp3");
+    const healSound = new Audio("Assets/heal.mp3");
 
     class Towers {
         constructor(x, y, r, a1, a2) {
@@ -49,6 +63,7 @@ window.addEventListener("DOMContentLoaded", () => {
             this.r = r;
             this.a1 = a1;
             this.a2 = a2;
+            this.health = 100;
         }
         draw(ctx) {
 
@@ -80,8 +95,35 @@ window.addEventListener("DOMContentLoaded", () => {
                     }
                 }
             }
-            if (towerDest) this.destroyed = true;
+            if (towerDest) {
+                this.destroyed = true;
+                this.health = 0;
+            }
             else this.draw(ctx);
+        }
+
+        reconstruct() {
+            if (!this.destroyed) return;
+
+            if (!this.rebuilding) {
+                this.rebuilding = true;
+                this.health = 0;
+            }
+
+            this.health += 0.015;
+
+            if (this.health >= 100) {
+                this.health = 100;
+                this.rebuilding = false;
+                this.destroyed = false;
+                for (const element of buildings[this.gridX][this.gridY]) {
+                    if (this.x > element.x && this.x < element.x + element.size && this.y < element.y + element.size && this.y > element.y) {
+                        element.destroyed = false;
+                        element.hit = 0;
+                    }
+                }
+            }
+
         }
 
     }
@@ -91,10 +133,12 @@ window.addEventListener("DOMContentLoaded", () => {
             this.x = x;
             this.y = y;
             this.size = 8;
-            this.speed = 1;
+            this.speed = 0.8;
             this.color = "rgb(255, 255, 0)";
             this.dx = 0;
             this.dy = 0;
+            this.range = tileSize / 1.5;
+            this.chasing = false;
         }
 
         draw() {
@@ -105,9 +149,35 @@ window.addEventListener("DOMContentLoaded", () => {
         }
 
         move() {
+            if (this.returningToGrid) {
+                const targetX = Math.round(this.x / tileSize) * tileSize;
+                const targetY = Math.round(this.y / tileSize) * tileSize;
+
+                const dx = targetX - this.x;
+                const dy = targetY - this.y;
+
+                const dist = Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2));
+
+                const moveX = (dx / dist) * this.speed;
+                const moveY = (dy / dist) * this.speed;
+
+                if (dist < 1) {
+                    this.x = targetX;
+                    this.y = targetY;
+                    this.returningToGrid = false;
+                    this.dx = 0;
+                    this.dy = 0;
+                } else {
+                    this.x += moveX;
+                    this.y += moveY;
+                }
+                return;
+            }
+
+
             const crossRoad = Math.floor(this.x) % tileSize === 0 && Math.floor(this.y) % tileSize === 0;
 
-            if (crossRoad) {
+            if (crossRoad && !this.chasing) {
                 let dir = Math.random() < 0.5 ? "x" : "y";
                 let dirVal = Math.random() < 0.5 ? -1 : 1;
 
@@ -124,9 +194,39 @@ window.addEventListener("DOMContentLoaded", () => {
                 this.dy = dir === "y" ? dirVal : 0;
             }
 
-            this.x += this.dx * this.speed;
-            this.y += this.dy * this.speed;
+            if (!this.chasing) {
+                this.x += this.dx * this.speed;
+                this.y += this.dy * this.speed;
+            }
+
+            const dx = player.x - this.x;
+            const dy = player.y - this.y;
+            const distance = Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2));
+            if (distance < this.range && !player.invisible) {
+                this.chasing = true;
+                this.speed = 1.5;
+                this.color = "rgb(255, 157, 0)";
+                this.size = 10;
+
+                this.x += dx * this.speed / distance;
+                this.y += dy * this.speed / distance;
+
+                if (distance < player.size) {
+                    player.health -= 0.05;
+                }
+            }
+            else if ((distance > this.range && this.chasing) || player.invisible) {
+                this.chasing = false;
+                this.size = 8;
+                this.speed = 0.8;
+                this.color = "rgb(255, 255, 0)";
+
+                this.returningToGrid = true;
+            }
+
+
         }
+
     }
 
 
@@ -135,16 +235,17 @@ window.addEventListener("DOMContentLoaded", () => {
 
             this.x = Math.random() * canvas.width;
             this.y = Math.random() * canvas.height;
-            this.r = 6;
+            this.r = 15;
             this.index = index;
         }
 
         draw() {
 
-            ctx.beginPath();
-            ctx.fillStyle = 'rgb(255, 0, 251)';
-            ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2, false);
-            ctx.fill();
+            ctx.save();
+            ctx.shadowColor = "black";
+            ctx.shadowBlur = "5";
+            ctx.drawImage(keyIcon, this.x - this.r / 2, this.y - this.r / 2, this.r, this.r);
+            ctx.restore();
         }
 
         capture() {
@@ -155,8 +256,8 @@ window.addEventListener("DOMContentLoaded", () => {
             if (distance < this.r + player.size) {
                 keys[this.index].captured = true;
                 player.noOfKeys++;
-                const sound = new Audio("Assets/scale.mp3");
-                sound.play();
+                const collectSound = new Audio("Assets/scale.mp3");
+                collectSound.play();
             }
         }
     }
@@ -178,13 +279,13 @@ window.addEventListener("DOMContentLoaded", () => {
 
             if (nextX + this.size > canvas.width || nextX - this.size < 0) {
                 this.dx = -this.dx;
-                this.speed *= 0.2;
+                this.speed *= 0.5;
                 nextX = this.x + this.dx * this.speed;
             }
 
             if (nextY + this.size > canvas.height || nextY - this.size < 0) {
                 this.dy = -this.dy;
-                this.speed *= 0.2;
+                this.speed *= 0.5;
                 nextY = this.y + this.dy * this.speed;
             }
 
@@ -237,9 +338,11 @@ window.addEventListener("DOMContentLoaded", () => {
         }
 
         draw() {
-            const shieldIcon = new Image();
-            shieldIcon.src = "Assets/shield.png";
+            ctx.save();
+            ctx.shadowColor = "cyan";
+            ctx.shadowBlur = 5;
             ctx.drawImage(shieldIcon, this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+            ctx.restore();
         }
 
         collect() {
@@ -248,8 +351,9 @@ window.addEventListener("DOMContentLoaded", () => {
             const distance = Math.sqrt(dx * dx + dy * dy);
 
             if (distance < this.size / 2 + player.size) {
+                shieldSound.play();
                 player.invisible = true;
-                setTimeout(() => player.invisible = false, 10000);
+                setTimeout(() => player.invisible = false, 6000);
                 return true;
             }
             return false;
@@ -264,9 +368,11 @@ window.addEventListener("DOMContentLoaded", () => {
         }
 
         draw() {
-            const shieldIcon = new Image();
-            shieldIcon.src = "Assets/health.png";
-            ctx.drawImage(shieldIcon, this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+            ctx.save();
+            ctx.shadowColor = 'green';
+            ctx.shadowBlur = 5;
+            ctx.drawImage(healIcon, this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+            ctx.restore();
         }
 
         collect() {
@@ -275,6 +381,7 @@ window.addEventListener("DOMContentLoaded", () => {
             const distance = Math.sqrt(dx * dx + dy * dy);
 
             if (distance < this.size / 2 + player.size) {
+                healSound.play();
                 player.health = Math.min(player.health + 20, 100);
                 return true;
             }
@@ -341,7 +448,7 @@ window.addEventListener("DOMContentLoaded", () => {
             buildings.push(row);
         }
 
-        for (let i = 0; i < 50; i++) {
+        for (let i = 0; i < 54; i++) {
             const key = new Key(i);
             key.draw();
             keys.push({ key: key, captured: false });
@@ -479,7 +586,9 @@ window.addEventListener("DOMContentLoaded", () => {
         drawGarden(hubX * tileSize, hubY * tileSize, "purple", false, true);
 
         towers.forEach(arc => {             // Doubt : Why is this even neccessary??
-            if (arc.destroyed) return;
+            if (arc.destroyed) {
+                return;
+            }
             ctx.beginPath();
             ctx.moveTo(arc.x, arc.y);
             ctx.arc(arc.x, arc.y, arc.r, arc.a1, arc.a2, false);
@@ -526,7 +635,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     function drawPlayer() {
 
-        ctx.fillStyle = (player.invisible)? "rgba(255, 255, 255, 0.58)" : player.color;
+        ctx.fillStyle = (player.invisible) ? "rgba(255, 255, 255, 0.58)" : player.color;
         ctx.beginPath();
         ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
         ctx.fill();
@@ -580,7 +689,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
                 if (inCone && !player.invisible) {
                     console.log("health decrease");
-                    player.health -= 0.05;
+                    player.health -= 0.04;
                     break;
                 }
             }
@@ -691,6 +800,26 @@ window.addEventListener("DOMContentLoaded", () => {
         updateStatus();
 
         towers.forEach(element => {
+            if (element.destroyed) {
+                element.reconstruct();
+
+                if (element.rebuilding) {
+                    const barWidth = 45;
+                    const barHeight = 8;
+
+                    ctx.fillStyle = "rgb(150, 0, 0)";
+                    ctx.fillRect(element.x - barWidth / 2, element.y - 20, barWidth, barHeight);
+
+                    ctx.fillStyle = "rgb(0, 166, 255)";
+                    ctx.fillRect(element.x - barWidth / 2, element.y - 20, barWidth * element.health / 100, barHeight);
+
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = "black";
+                    ctx.strokeRect(element.x - barWidth / 2, element.y - 20, barWidth, barHeight);
+
+                    ctx.drawImage(constructionIcon, element.x - 20, element.y, 40, 40);
+                }
+            }
             if (!element.destroyed)
                 element.rotate(ctx);
         });
@@ -725,6 +854,8 @@ window.addEventListener("DOMContentLoaded", () => {
 
         const bullet = new Bullet(player.x, player.y, X, Y);
         bullets.push(bullet);
+        const shootSound = new Audio("Assets/shoot.mp3");
+        shootSound.play();
     });
 
     window.addEventListener("resize", () => {
@@ -779,7 +910,4 @@ window.addEventListener("DOMContentLoaded", () => {
         }
         drawSaved();
     });
-
-
-
 });
