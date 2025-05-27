@@ -6,7 +6,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const gap = 35;
     const gridColor = "rgba(17, 255, 0, 0.91)";
     const gardenSize = tileSize - 2 * gap;
-    const arcRad = gardenSize / 1.15;
+    const arcRad = gardenSize / 1.20;
     const keysPressed = {};
     let camera = { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
 
@@ -26,11 +26,21 @@ window.addEventListener("DOMContentLoaded", () => {
     } while (Math.abs(hubX - X) < 6 || Math.abs(hubY - Y) < 4 || (X == 0 && Y == 0) || (hubX == 0 && hubY == 0));
 
     let systemHealth = 51;
-    const player = { x: tileSize, y: tileSize, size: 12, color: "white", noOfKeys: 0, shards: 0, health: 100 };
+    const player = { x: tileSize * 2, y: tileSize * 2, size: 12, color: "white", noOfKeys: 0, shards: 0, health: 100, shardsDel: 0 };
+    const bot = { x: X * tileSize, y: Y * tileSize, size: 10, color: "yellow", speed: 1 };
     let buildings = [];
     let towers = [];
     let bullets = [];
     let keys = [];
+    let bots = [];
+    let healthPacks = [];
+    let shields = [];
+
+    // local storage
+    if (!localStorage.getItem("highScore")) {
+        localStorage.setItem("highScore", "0");
+    }
+
 
     class Towers {
         constructor(x, y, r, a1, a2) {
@@ -76,6 +86,50 @@ window.addEventListener("DOMContentLoaded", () => {
 
     }
 
+    class Bot {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            this.size = 8;
+            this.speed = 1;
+            this.color = "rgb(255, 255, 0)";
+            this.dx = 0;
+            this.dy = 0;
+        }
+
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        move() {
+            const crossRoad = Math.floor(this.x) % tileSize === 0 && Math.floor(this.y) % tileSize === 0;
+
+            if (crossRoad) {
+                let dir = Math.random() < 0.5 ? "x" : "y";
+                let dirVal = Math.random() < 0.5 ? -1 : 1;
+
+                if ((dir === "x" && dirVal === -this.dx) || (dir === "y" && dirVal === -this.dy)) {
+                    dirVal *= -1;
+                }
+
+                if (this.x <= 0 && dir === "x" && dirVal === -1) dirVal = 1;
+                if (this.y <= 0 && dir === "y" && dirVal === -1) dirVal = 1;
+                if (this.x >= canvas.width - tileSize && dir === "x" && dirVal === 1) dirVal = -1;
+                if (this.y >= canvas.height - tileSize && dir === "y" && dirVal === 1) dirVal = -1;
+
+                this.dx = dir === "x" ? dirVal : 0;
+                this.dy = dir === "y" ? dirVal : 0;
+            }
+
+            this.x += this.dx * this.speed;
+            this.y += this.dy * this.speed;
+        }
+    }
+
+
     class Key {
         constructor(index) {
 
@@ -101,6 +155,8 @@ window.addEventListener("DOMContentLoaded", () => {
             if (distance < this.r + player.size) {
                 keys[this.index].captured = true;
                 player.noOfKeys++;
+                const sound = new Audio("Assets/scale.mp3");
+                sound.play();
             }
         }
     }
@@ -173,6 +229,60 @@ window.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    class Shield {
+        constructor() {
+            this.x = Math.random() * canvas.width;
+            this.y = Math.random() * canvas.height;
+            this.size = 24;
+        }
+
+        draw() {
+            const shieldIcon = new Image();
+            shieldIcon.src = "Assets/shield.png";
+            ctx.drawImage(shieldIcon, this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+        }
+
+        collect() {
+            const dx = this.x - player.x;
+            const dy = this.y - player.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < this.size / 2 + player.size) {
+                player.invisible = true;
+                setTimeout(() => player.invisible = false, 10000);
+                return true;
+            }
+            return false;
+        }
+    }
+
+    class HealthPack {
+        constructor() {
+            this.x = Math.random() * canvas.width;
+            this.y = Math.random() * canvas.height;
+            this.size = 24;
+        }
+
+        draw() {
+            const shieldIcon = new Image();
+            shieldIcon.src = "Assets/health.png";
+            ctx.drawImage(shieldIcon, this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+        }
+
+        collect() {
+            const dx = this.x - player.x;
+            const dy = this.y - player.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < this.size / 2 + player.size) {
+                player.health = Math.min(player.health + 20, 100);
+                return true;
+            }
+            return false;
+        }
+    }
+
+
     function drawMap() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         for (let i = 0; i < canvas.width; i += tileSize) {
@@ -231,12 +341,27 @@ window.addEventListener("DOMContentLoaded", () => {
             buildings.push(row);
         }
 
-        // to create keys 
         for (let i = 0; i < 50; i++) {
             const key = new Key(i);
             key.draw();
             keys.push({ key: key, captured: false });
         }
+
+        for (let i = 0; i < 3; i++) {
+            const bot = new Bot(canvas.width, canvas.height);
+            bot.draw();
+            bots.push(bot);
+        }
+        for (let i = 0; i < 5; i++) {
+            const pack = new HealthPack();
+            healthPacks.push({ pack: pack, collected: false });
+        }
+
+        for (let i = 0; i < 3; i++) {
+            const shield = new Shield();
+            shields.push({ shield: shield, collected: false });
+        }
+
     }
 
     function drawGrid(pos) {
@@ -265,7 +390,7 @@ window.addEventListener("DOMContentLoaded", () => {
             ctx.fill();
             ctx.font = "20px Orbitron";
             ctx.fillStyle = "rgb(255, 73, 73)";
-            ctx.fillText("B A S E" ,x + tileSize / 2 - 40, y + tileSize / 2 + 5);
+            ctx.fillText("B A S E", x + tileSize / 2 - 40, y + tileSize / 2 + 5);
         }
         else if (hub) {
             ctx.fillStyle = color;
@@ -274,7 +399,7 @@ window.addEventListener("DOMContentLoaded", () => {
             ctx.fill();
             ctx.font = "20px Orbitron";
             ctx.fillStyle = "rgb(255, 255, 0)";
-            ctx.fillText("H U B" ,x + tileSize / 2 - 28, y + tileSize / 2 + 5);
+            ctx.fillText("H U B", x + tileSize / 2 - 28, y + tileSize / 2 + 5);
         }
         else {
             ctx.fillStyle = color;
@@ -371,11 +496,37 @@ window.addEventListener("DOMContentLoaded", () => {
             element.key.draw();
             element.key.capture();
         });
+
+        bots.forEach((element) => {
+            element.draw();
+            element.move();
+        });
+
+        healthPacks.forEach((element) => {
+            if (!element.collected) {
+                element.pack.draw();
+                if (element.pack.collect()) {
+                    element.collected = true;
+                }
+            }
+        });
+
+        shields.forEach((element) => {
+            if (!element.collected) {
+                element.shield.draw();
+                if (element.shield.collect()) {
+                    element.collected = true;
+                }
+            }
+        });
+
+
     }
 
 
     function drawPlayer() {
-        ctx.fillStyle = player.color;
+
+        ctx.fillStyle = (player.invisible)? "rgba(255, 255, 255, 0.58)" : player.color;
         ctx.beginPath();
         ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
         ctx.fill();
@@ -396,7 +547,7 @@ window.addEventListener("DOMContentLoaded", () => {
             if (keysPressed["ArrowRight"]) nextX += step;
             if (nextX - player.size < 0 || nextY - player.size < 0 || nextX + player.size > canvas.width || nextY + player.size > canvas.height) return;
             for (const element of buildings[proximityX][proximityY]) {
-                if (element.hit < 5) {
+                if (element.hit < 8) {
                     const inX = nextX + player.size > element.x && nextX - player.size < element.x + element.size;
                     const inY = nextY + player.size > element.y && nextY - player.size < element.y + element.size;
                     if (inX && inY)
@@ -427,13 +578,47 @@ window.addEventListener("DOMContentLoaded", () => {
 
                 const inCone = (a1 < a2) ? theta >= a1 && theta <= a2 : theta >= a1 || theta <= a2;
 
-                if (inCone) {
+                if (inCone && !player.invisible) {
                     console.log("health decrease");
                     player.health -= 0.05;
                     break;
                 }
             }
         }
+
+        for (const bot of bots) {
+            const dx = player.x - bot.x;
+            const dy = player.y - bot.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < 100) {
+
+            }
+        }
+
+        // health bar
+        const barWidth = 30;
+        const barHeight = 4;
+        const healthPercent = player.health / 100;
+
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
+        ctx.fillRect(player.x - barWidth / 2, player.y - player.size - 10, barWidth, barHeight);
+
+        ctx.fillStyle = 'lime';
+        ctx.fillRect(player.x - barWidth / 2, player.y - player.size - 10, barWidth * healthPercent, barHeight);
+
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(player.x - barWidth / 2, player.y - player.size - 10, barWidth, barHeight);
+
+        // Show Shards
+        for (let i = 0; i < player.shards; i++) {
+            ctx.fillStyle = 'cyan';
+            ctx.beginPath();
+            ctx.rect(player.x - 20 + i * 10, player.y + player.size + 10, 6, 6);
+            ctx.fill();
+        }
+
     }
 
     function updateStatus() {
@@ -448,7 +633,14 @@ window.addEventListener("DOMContentLoaded", () => {
 
         if (onBase && player.shards > 0) {
             systemHealth += 10;
+            player.shardsDel++;
             player.shards--;
+
+            const savedScore = parseInt(localStorage.getItem("highScore"));
+            if (savedScore < player.shardsDel) {
+                localStorage.setItem("highScore", player.shardsDel.toString());
+                console.log("new high score");
+            }
         }
 
         systemHealth = Math.min(systemHealth, 100);
@@ -456,8 +648,8 @@ window.addEventListener("DOMContentLoaded", () => {
         document.getElementById("plHealth").textContent = `Player's Health : ${Math.floor(player.health)}`;
         document.getElementById("sysHealth").textContent = `System's Health : ${Math.floor(systemHealth)}`;
         document.getElementById("noOfKeys").textContent = `Keys : ${player.noOfKeys}`;
-        document.getElementById("shards").textContent = `Shards : ${player.shards}`;
-        document.getElementById("shardsDel").textContent = `Shards Delivered : ${player.shards}`;
+        document.getElementById("shardsDel").textContent = `Shards Delivered : ${player.shardsDel}`;
+        document.getElementById("highScore").textContent = `High Score : ${localStorage.getItem("highScore")}`;
 
 
         if (systemHealth >= 100) {
@@ -587,4 +779,7 @@ window.addEventListener("DOMContentLoaded", () => {
         }
         drawSaved();
     });
+
+
+
 });
