@@ -9,7 +9,7 @@ canvas {
 body {
     margin: 0px;
     background-color: black;
-    /* overflow: hidden; */
+    overflow: hidden;
 }
 
 .btn-container {
