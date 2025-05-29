@@ -61,6 +61,12 @@ window.addEventListener("DOMContentLoaded", () => {
     const baseIcon = new Image();
     baseIcon.src = "Assets/base.png";
 
+    const caveIcon = new Image();
+    caveIcon.src = "Assets/cave.png";
+
+    const trolleyIcon = new Image();
+    trolleyIcon.src = "Assets/trolley.png";
+
     const shieldSound = new Audio("Assets/shields.mp3");
     const healSound = new Audio("Assets/heal.mp3");
     const speedSound = new Audio("Assets/speed.mp3");
@@ -138,9 +144,9 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     class Bot {
-        constructor(x, y, mutate) {
-            this.x = x;
-            this.y = y;
+        constructor(mutate) {
+            this.x = Math.floor((Math.random() * canvas.width) / tileSize) * tileSize;
+            this.y = Math.floor((Math.random() * canvas.height) / tileSize) * tileSize;
 
             this.baseSize = mutate.baseSize;
             this.baseColor = mutate.baseColor;
@@ -272,8 +278,8 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     class LightBot extends Bot {
-        constructor(x, y) {
-            super(x, y, {
+        constructor() {
+            super({
                 baseSize: 8,
                 baseSpeed: 1,
                 baseColor: "rgb(255, 255, 0)",
@@ -289,8 +295,8 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     class HeavyBot extends Bot {
-        constructor(x, y) {
-            super(x, y, {
+        constructor() {
+            super({
                 baseSize: 11,
                 baseSpeed: 0.5,
                 baseColor: "rgb(78, 225, 255)",
@@ -306,8 +312,8 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     class SniperBot extends Bot {
-        constructor(x, y) {
-            super(x, y, {
+        constructor() {
+            super({
                 baseSize: 7,
                 baseSpeed: 0.5,
                 baseColor: "rgb(172, 78, 255)",
@@ -594,18 +600,18 @@ window.addEventListener("DOMContentLoaded", () => {
             keys.push({ key: key, captured: false });
         }
 
-        for (let i = 0; i < 4; i++) {
-            const bot = new LightBot(hubX * tileSize, hubY * tileSize);
+        for (let i = 0; i < 3; i++) {
+            const bot = new LightBot();
             bots.push(bot);
         }
 
         for (let i = 0; i < 3; i++) {
-            const bot = new HeavyBot(hubX * tileSize, hubY * tileSize);
+            const bot = new HeavyBot();
             bots.push(bot);
         }
 
         for (let i = 0; i < 2; i++) {
-            const bot = new SniperBot(hubX * tileSize, hubY * tileSize);
+            const bot = new SniperBot();
             bots.push(bot);
         }
         console.log(bots);
@@ -614,12 +620,12 @@ window.addEventListener("DOMContentLoaded", () => {
             healthPacks.push({ pack: pack, collected: false });
         }
 
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 4; i++) {
             const shield = new Shield();
             shields.push({ shield: shield, collected: false });
         }
 
-        for (let i = 0; i < 4; i++) {
+        for (let i = 0; i < 5; i++) {
             const booster = new SpeedBooster();
             speedBoosters.push({ booster: booster, collected: false });
         }
@@ -654,12 +660,10 @@ window.addEventListener("DOMContentLoaded", () => {
             ctx.fillText("B A S E", x + tileSize / 2 - 40, y + tileSize / 2 + 50);
         }
         else if (hub) {
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.arc(x + tileSize / 2, y + tileSize / 2, 20, 0, Math.PI * 2);
-            ctx.fill();
             ctx.font = "20px Orbitron";
             ctx.fillStyle = "rgb(255, 255, 0)";
+            ctx.drawImage(caveIcon, x + 55, y + 50, 130, 130);
+            ctx.drawImage(trolleyIcon, x + tileSize / 2 - 20, y + tileSize / 2 + 20, 50, 50);
             ctx.fillText("H U B", x + tileSize / 2 - 28, y + tileSize / 2 + 5);
         }
         else {
@@ -720,6 +724,7 @@ window.addEventListener("DOMContentLoaded", () => {
                         building.y > camBottom
                     ) continue;
                     if (i == X && j == Y) building.hit = 5;
+                    if (i == hubX && j == hubY) building.hit = 5;
                     if (building.hit < 5) {
                         ctx.fillStyle = `rgba(0,0,0,0.95)`;
                         ctx.fillRect(building.x, building.y, building.size, building.size);
@@ -1141,8 +1146,8 @@ window.addEventListener("DOMContentLoaded", () => {
         bullets = [];
         hostage = [];
         cooldown = 0;
-        
-        for(const bot of bots){
+
+        for (const bot of bots) {
             bot.chasing = false;
             bot.dead = false;
             bot.health = 100;
