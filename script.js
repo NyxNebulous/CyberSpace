@@ -8,7 +8,6 @@ window.addEventListener("DOMContentLoaded", () => {
     const gardenSize = tileSize - 2 * gap;
     const arcRad = gardenSize / 1.15;
     const keysPressed = {};
-    let camera = { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
 
     canvas.width = 3120;
     canvas.height = 1680;
@@ -26,7 +25,8 @@ window.addEventListener("DOMContentLoaded", () => {
     } while (Math.abs(hubX - X) < 6 || Math.abs(hubY - Y) < 4 || (X == 0 && Y == 0) || (hubX == 0 && hubY == 0));
 
     let systemHealth = 51;
-    const player = { x: tileSize * 2, y: tileSize * 2, size: 12, color: "white", noOfKeys: 0, shards: 0, health: 100, shardsDel: 0 };
+    let camera = { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
+    const player = { x: X * tileSize + tileSize / 2, y: Y * tileSize + 1.1*tileSize / 2, size: 12, color: "white", noOfKeys: 0, step: 3, shards: 0, health: 100, shardsDel: 0 };
     let buildings = [];
     let towers = [];
     let bullets = [];
@@ -34,6 +34,9 @@ window.addEventListener("DOMContentLoaded", () => {
     let bots = [];
     let healthPacks = [];
     let shields = [];
+    let speedBoosters = [];
+    let hostage = [];
+    let cooldown = 0;
 
     // local storage
     if (!localStorage.getItem("highScore")) {
@@ -52,8 +55,15 @@ window.addEventListener("DOMContentLoaded", () => {
     const keyIcon = new Image();
     keyIcon.src = "Assets/crystal.png";
 
+    const speedIcon = new Image();
+    speedIcon.src = "Assets/flash.png";
+
+    const baseIcon = new Image();
+    baseIcon.src = "Assets/base.png";
+
     const shieldSound = new Audio("Assets/shields.mp3");
     const healSound = new Audio("Assets/heal.mp3");
+    const speedSound = new Audio("Assets/speed.mp3");
 
     class Towers {
         constructor(x, y, r, a1, a2) {
@@ -128,16 +138,33 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     class Bot {
-        constructor(x, y) {
+        constructor(x, y, mutate) {
             this.x = x;
             this.y = y;
-            this.size = 8;
-            this.speed = 0.8;
-            this.color = "rgb(255, 255, 0)";
+
+            this.baseSize = mutate.baseSize;
+            this.baseColor = mutate.baseColor;
+            this.baseSpeed = mutate.baseSpeed;
+
+            this.chaseSize = mutate.chaseSize;
+            this.chaseSpeed = mutate.chaseSpeed;
+            this.chaseColor = mutate.chaseColor;
+
+            this.shootInterval = mutate.shootInterval;
+            this.takeDamage = mutate.takeDamage;
+            this.giveDamage = mutate.giveDamage;
+
+            this.size = mutate.baseSize;
+            this.speed = mutate.baseSpeed;
+            this.color = mutate.baseColor;
+            this.type = mutate.type;
+            this.range = mutate.range;
+
             this.dx = 0;
             this.dy = 0;
-            this.range = tileSize / 1.5;
             this.chasing = false;
+            this.health = 100;
+            this.dead = false;
         }
 
         draw() {
@@ -145,17 +172,30 @@ window.addEventListener("DOMContentLoaded", () => {
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
             ctx.fill();
+
+            const barWidth = 20;
+            const barHeight = 3;
+            const percent = this.health / 100;
+            ctx.fillStyle = 'black';
+            ctx.fillRect(this.x - barWidth / 2, this.y - this.size - 8, barWidth, barHeight);
+            ctx.fillStyle = 'white';
+            ctx.fillRect(this.x - barWidth / 2, this.y - this.size - 8, barWidth * percent, barHeight);
         }
 
         move() {
+
+            ctx.fillStyle = this.color.replace("rgb", "rgba").replace(")", ", 0.1)");
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.range, 0, Math.PI * 2);
+            ctx.fill();
+
             if (this.returningToGrid) {
                 const targetX = Math.round(this.x / tileSize) * tileSize;
                 const targetY = Math.round(this.y / tileSize) * tileSize;
 
                 const dx = targetX - this.x;
                 const dy = targetY - this.y;
-
-                const dist = Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2));
+                const dist = Math.sqrt(dx * dx + dy * dy);
 
                 const moveX = (dx / dist) * this.speed;
                 const moveY = (dy / dist) * this.speed;
@@ -172,7 +212,6 @@ window.addEventListener("DOMContentLoaded", () => {
                 }
                 return;
             }
-
 
             const crossRoad = Math.floor(this.x) % tileSize === 0 && Math.floor(this.y) % tileSize === 0;
 
@@ -200,32 +239,129 @@ window.addEventListener("DOMContentLoaded", () => {
 
             const dx = player.x - this.x;
             const dy = player.y - this.y;
-            const distance = Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2));
-            if (distance < this.range && !player.invisible) {
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < this.range) {
                 this.chasing = true;
-                this.speed = 1.5;
-                this.color = "rgb(255, 157, 0)";
-                this.size = 10;
+                this.speed = this.chaseSpeed;
+                this.color = this.chaseColor;
+                this.size = this.chaseSize;
 
-                this.x += dx * this.speed / distance;
-                this.y += dy * this.speed / distance;
+                this.x += (dx / distance) * this.speed;
+                this.y += (dy / distance) * this.speed;
 
-                if (distance < player.size) {
-                    player.health -= 0.05;
-                }
-            }
-            else if ((distance > this.range && this.chasing) || player.invisible) {
+            } else if (distance > this.range && this.chasing) {
                 this.chasing = false;
-                this.size = 8;
-                this.speed = 0.8;
-                this.color = "rgb(255, 255, 0)";
-
+                this.size = this.baseSize;
+                this.speed = this.baseSpeed;
+                this.color = this.baseColor;
                 this.returningToGrid = true;
             }
 
+            if (this.chasing && ++cooldown % this.shootInterval == 0) {
+                cooldown = 0;
+                const dx = player.x - this.x;
+                const dy = player.y - this.y;
+                const X = dx / Math.sqrt(dx * dx + dy * dy);
+                const Y = dy / Math.sqrt(dx * dx + dy * dy);
 
+                const bullet = new Shot(this.x, this.y, X, Y, this.giveDamage);
+                hostage.push(bullet);
+            }
+        }
+    }
+
+    class LightBot extends Bot {
+        constructor(x, y) {
+            super(x, y, {
+                baseSize: 8,
+                baseSpeed: 1,
+                baseColor: "rgb(255, 255, 0)",
+                chaseColor: "rgb(255, 115, 0)",
+                chaseSize: 11,
+                chaseSpeed: 1.8,
+                shootInterval: 35,
+                takeDamage: 15,
+                giveDamage: 0.3,
+                range: tileSize / 1.5
+            });
+        }
+    }
+
+    class HeavyBot extends Bot {
+        constructor(x, y) {
+            super(x, y, {
+                baseSize: 11,
+                baseSpeed: 0.5,
+                baseColor: "rgb(78, 225, 255)",
+                chaseColor: "rgb(0, 0, 158)",
+                chaseSize: 13,
+                chaseSpeed: 1.2,
+                shootInterval: 60,
+                takeDamage: 5,
+                giveDamage: 0.8,
+                range: tileSize / 1.5
+            });
+        }
+    }
+
+    class SniperBot extends Bot {
+        constructor(x, y) {
+            super(x, y, {
+                baseSize: 7,
+                baseSpeed: 0.5,
+                baseColor: "rgb(172, 78, 255)",
+                chaseColor: "rgb(82, 0, 182)",
+                chaseSize: 10,
+                chaseSpeed: 0,
+                shootInterval: 250,
+                takeDamage: 15,
+                giveDamage: 2,
+                range: tileSize * 1.5
+            });
+        }
+    }
+
+    class Shot {
+        constructor(x, y, dx, dy, harm) {
+            this.x = x;
+            this.y = y;
+            this.dx = dx;
+            this.dy = dy;
+            this.speed = 7;
+            this.size = 3;
+            this.canMove = true;
+            this.giveDamage = harm;
         }
 
+        shoot() {
+
+            const dx = player.x - this.x;
+            const dy = player.y - this.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist <= player.size) {
+                player.health -= this.giveDamage;
+                this.canMove = false;
+            }
+            if (dist > canvas.width) {
+                this.canMove = false;
+            }
+            if (this.canMove) {
+                this.x += this.dx * this.speed;
+                this.y += this.dy * this.speed;
+            }
+        }
+
+        draw(ctx) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fillStyle = "rgb(255, 91, 69)";
+            ctx.fill();
+            ctx.strokeStyle = "white";
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.stroke;
+        }
     }
 
     class Key {
@@ -290,34 +426,37 @@ window.addEventListener("DOMContentLoaded", () => {
             const proximityX = Math.floor(this.x / tileSize);
             const proximityY = Math.floor(this.y / tileSize);
 
-            for (const element of buildings[proximityX][proximityY]) {
-                if (element.hit >= 8) continue;
+            if (buildings[proximityX][proximityY]) {
+                for (const element of buildings[proximityX][proximityY]) {
+                    if (element.hit >= 5) continue;
 
-                const inX = nextX + this.size > element.x && nextX - this.size < element.x + element.size;
-                const inY = nextY + this.size > element.y && nextY - this.size < element.y + element.size;
+                    const inX = nextX + this.size > element.x && nextX - this.size < element.x + element.size;
+                    const inY = nextY + this.size > element.y && nextY - this.size < element.y + element.size;
 
-                if (inX && inY) {
-                    const prevX = this.x;
-                    const prevY = this.y;
+                    if (inX && inY) {
+                        const prevX = this.x;
+                        const prevY = this.y;
 
-                    if (prevX + this.size <= element.x || prevX - this.size >= element.x + element.size) {
-                        // this.canMove = false
-                        this.dx = -this.dx;
+                        if (prevX + this.size <= element.x || prevX - this.size >= element.x + element.size) {
+                            // this.canMove = false
+                            this.dx = -this.dx;
+                        }
+
+                        if (prevY + this.size <= element.y || prevY - this.size >= element.y + element.size) {
+                            // this.canMove = false;
+                            this.dy = -this.dy;
+                        }
+                        this.speed *= 0.5;
+                        element.hit++;
                     }
-
-                    if (prevY + this.size <= element.y || prevY - this.size >= element.y + element.size) {
-                        // this.canMove = false;
-                        this.dy = -this.dy;
-                    }
-                    this.speed *= 0.5;
-                    element.hit++;
                 }
+                if (this.canMove) {
+                    this.x += this.dx * this.speed;
+                    this.y += this.dy * this.speed;
+                }
+                if (this.speed < 0.9) this.canMove = false;
             }
-            if (this.canMove) {
-                this.x += this.dx * this.speed;
-                this.y += this.dy * this.speed;
-            }
-            if (this.speed < 0.9) this.canMove = false;
+
         }
 
         draw(ctx) {
@@ -350,8 +489,8 @@ window.addEventListener("DOMContentLoaded", () => {
 
             if (distance < this.size / 2 + player.size) {
                 shieldSound.play();
-                player.invisible = true;
-                setTimeout(() => player.invisible = false, 6000);
+                player.shielded = true;
+                setTimeout(() => player.shielded = false, 6000);
                 return true;
             }
             return false;
@@ -380,7 +519,33 @@ window.addEventListener("DOMContentLoaded", () => {
 
             if (distance < this.size / 2 + player.size) {
                 healSound.play();
-                player.health = Math.min(player.health + 20, 100);
+                player.health = Math.min(player.health + 25, 100);
+                return true;
+            }
+            return false;
+        }
+    }
+
+    class SpeedBooster {
+        constructor() {
+            this.x = Math.random() * canvas.width;
+            this.y = Math.random() * canvas.height;
+            this.size = 24;
+        }
+
+        draw() {
+            ctx.drawImage(speedIcon, this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+        }
+
+        collect() {
+            const dx = this.x - player.x;
+            const dy = this.y - player.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < this.size / 2 + player.size) {
+                speedSound.play();
+                player.step = 6;
+                setTimeout(() => player.step = 2.5, 5000);
                 return true;
             }
             return false;
@@ -429,11 +594,22 @@ window.addEventListener("DOMContentLoaded", () => {
             keys.push({ key: key, captured: false });
         }
 
-        for (let i = 0; i < 3; i++) {
-            const bot = new Bot(canvas.width, canvas.height);
+        for (let i = 0; i < 4; i++) {
+            const bot = new LightBot(hubX * tileSize, hubY * tileSize);
             bots.push(bot);
         }
-        for (let i = 0; i < 5; i++) {
+
+        for (let i = 0; i < 3; i++) {
+            const bot = new HeavyBot(hubX * tileSize, hubY * tileSize);
+            bots.push(bot);
+        }
+
+        for (let i = 0; i < 2; i++) {
+            const bot = new SniperBot(hubX * tileSize, hubY * tileSize);
+            bots.push(bot);
+        }
+        console.log(bots);
+        for (let i = 0; i < 7; i++) {
             const pack = new HealthPack();
             healthPacks.push({ pack: pack, collected: false });
         }
@@ -442,6 +618,12 @@ window.addEventListener("DOMContentLoaded", () => {
             const shield = new Shield();
             shields.push({ shield: shield, collected: false });
         }
+        
+        for (let i = 0; i < 4; i++) {
+            const booster = new SpeedBooster();
+            speedBoosters.push({ booster: booster, collected: false });
+        }
+
 
     }
 
@@ -464,11 +646,12 @@ window.addEventListener("DOMContentLoaded", () => {
         if (base) {
             ctx.fillStyle = color;
             ctx.beginPath();
-            ctx.arc(x + tileSize / 2, y + tileSize / 2, 20, 0, Math.PI * 2);
+            ctx.arc(x + tileSize / 2, y + tileSize / 2, 70, 0, Math.PI * 2);
             ctx.fill();
             ctx.font = "20px Orbitron";
             ctx.fillStyle = "rgb(255, 73, 73)";
-            ctx.fillText("B A S E", x + tileSize / 2 - 40, y + tileSize / 2 + 5);
+            ctx.drawImage(baseIcon, x + tileSize / 2 - 37.5, y + tileSize / 2 - 50, 75, 75);
+            ctx.fillText("B A S E", x + tileSize / 2 - 40, y + tileSize / 2 + 50);
         }
         else if (hub) {
             ctx.fillStyle = color;
@@ -536,8 +719,8 @@ window.addEventListener("DOMContentLoaded", () => {
                         building.y + building.size < camera.y ||
                         building.y > camBottom
                     ) continue;
-
-                    if (building.hit < 8) {
+                    if (i == X && j == Y) building.hit = 5;
+                    if (building.hit < 5) {
                         ctx.fillStyle = `rgba(0,0,0,0.95)`;
                         ctx.fillRect(building.x, building.y, building.size, building.size);
 
@@ -567,7 +750,7 @@ window.addEventListener("DOMContentLoaded", () => {
             }
         }
 
-        drawGarden(X * tileSize, Y * tileSize, "blue", true, false);
+        drawGarden(X * tileSize, Y * tileSize, "whitesmoke", true, false);
         drawGarden(hubX * tileSize, hubY * tileSize, "purple", false, true);
 
         towers.forEach(arc => {
@@ -622,23 +805,47 @@ window.addEventListener("DOMContentLoaded", () => {
             }
         });
 
+        speedBoosters.forEach(element => {
+            if (!element.collected &&
+                Math.abs(element.booster.x - player.x) < camera.width / 1.5 &&
+                Math.abs(element.booster.y - player.y) < camera.height / 1.5
+            ) {
+                element.booster.draw();
+                if (element.booster.collect()) element.collected = true;
+            }
+        });
+
+        bots = bots.filter(bot => !bot.dead);
         bots.forEach(bot => {
             bot.draw();
             bot.move();
-        });
 
+            for (let bullet of bullets) {
+                const dx = bullet.x - bot.x;
+                const dy = bullet.y - bot.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < bot.size + bullet.size) {
+                    bullet.canMove = false;
+                    bot.health -= bot.takeDamage;
+                    if (bot.health <= 0) {
+                        bot.dead = true;
+                    }
+                }
+            }
+            bullets = bullets.filter(bullet => bullet.canMove);
+        });
     }
 
     function drawPlayer() {
 
-        ctx.fillStyle = (player.invisible) ? "rgba(255, 255, 255, 0.58)" : player.color;
+        ctx.fillStyle = player.color;
         ctx.beginPath();
         ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
         ctx.fill();
 
         const move = () => {
             let canMove = true;
-            let step = 2.5;
 
             let proximityX = Math.floor(player.x / tileSize);
             let proximityY = Math.floor(player.y / tileSize);
@@ -646,13 +853,14 @@ window.addEventListener("DOMContentLoaded", () => {
             let nextX = player.x;
             let nextY = player.y;
 
-            if (keysPressed["ArrowUp"]) nextY -= step;
-            if (keysPressed["ArrowDown"]) nextY += step;
-            if (keysPressed["ArrowLeft"]) nextX -= step;
-            if (keysPressed["ArrowRight"]) nextX += step;
+            if (keysPressed["w"] || keysPressed["ArrowUp"]) nextY -= player.step;
+            if (keysPressed["s"] || keysPressed["ArrowDown"]) nextY += player.step;
+            if (keysPressed["a"] || keysPressed["ArrowLeft"]) nextX -= player.step;
+            if (keysPressed["d"] || keysPressed["ArrowRight"]) nextX += player.step;
+
             if (nextX - player.size < 0 || nextY - player.size < 0 || nextX + player.size > canvas.width || nextY + player.size > canvas.height) return;
             for (const element of buildings[proximityX][proximityY]) {
-                if (element.hit < 8) {
+                if (element.hit < 5) {
                     const inX = nextX + player.size > element.x && nextX - player.size < element.x + element.size;
                     const inY = nextY + player.size > element.y && nextY - player.size < element.y + element.size;
                     if (inX && inY)
@@ -683,21 +891,10 @@ window.addEventListener("DOMContentLoaded", () => {
 
                 const inCone = (a1 < a2) ? theta >= a1 && theta <= a2 : theta >= a1 || theta <= a2;
 
-                if (inCone && !player.invisible) {
-                    console.log("health decrease");
+                if (inCone && !player.shielded) {
                     player.health -= 0.04;
                     break;
                 }
-            }
-        }
-
-        for (const bot of bots) {
-            const dx = player.x - bot.x;
-            const dy = player.y - bot.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            if (distance < 100) {
-
             }
         }
 
@@ -724,12 +921,22 @@ window.addEventListener("DOMContentLoaded", () => {
             ctx.fill();
         }
 
+        // Show speed booster
+        if (player.step > 3) {
+            ctx.drawImage(speedIcon, player.x + 20, player.y - 10, 8, 8);
+        }
+
+        // Show shielded or not
+        if (player.shielded) {
+            ctx.drawImage(shieldIcon, player.x - 25, player.y - 10, 8, 8);
+        }
+
     }
 
     function updateStatus() {
         systemHealth -= 1 / 1000;
-        const onHub = Math.floor(player.x / tileSize) == hubX && Math.floor(player.y / tileSize) == hubY;
-        const onBase = Math.floor(player.x / tileSize) == X && Math.floor(player.y / tileSize) == Y;
+        const onHub = Math.abs(hubX * tileSize + tileSize / 2 - player.x) < tileSize / 3 && Math.abs(hubY * tileSize + tileSize / 2 - player.y) < tileSize / 3;
+        const onBase = Math.abs(X * tileSize + tileSize / 2 - player.x) < tileSize / 3 && Math.abs(Y * tileSize + tileSize / 2 - player.y) < tileSize / 3;
 
         if (onHub && player.noOfKeys >= 5) {
             player.noOfKeys -= 5;
@@ -778,9 +985,20 @@ window.addEventListener("DOMContentLoaded", () => {
         camera.x = Math.max(0, Math.min(camera.x, canvas.width - camera.width));
         camera.y = Math.max(0, Math.min(camera.y, canvas.height - camera.height));
     }
+    let lastTime = performance.now();
+    let frameCount = 0;
 
     function animate() {
         requestAnimationFrame(animate);
+        const now = performance.now();
+        frameCount++;
+
+        if (now - lastTime >= 1000) {
+            console.log("FPS:", frameCount);
+            frameCount = 0;
+            lastTime = now;
+        }
+
         if (isPaused) return;
 
         updateCamera();
@@ -824,6 +1042,15 @@ window.addEventListener("DOMContentLoaded", () => {
                 element.draw(ctx);
             }
         });
+        bullets = bullets.filter(bullet => bullet.canMove);
+
+        hostage.forEach(element => {
+            if (element.canMove) {
+                element.shoot();
+                element.draw(ctx);
+            }
+        });
+        hostage = hostage.filter(bullet => bullet.canMove);
 
         ctx.restore();
     }
@@ -841,6 +1068,7 @@ window.addEventListener("DOMContentLoaded", () => {
     });
 
     canvas.addEventListener("click", (event) => {
+        if (isPaused) return;
         const dx = event.x + camera.x - player.x;
         const dy = event.y + camera.y - player.y;
         const X = dx / Math.sqrt(dx * dx + dy * dy);
@@ -860,12 +1088,12 @@ window.addEventListener("DOMContentLoaded", () => {
     });
 
     //stops browser from scrolling
-    window.addEventListener("keydown", (e) => {
-        keysPressed[e.key] = true;
-        if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key)) {
-            e.preventDefault();
-        }
-    });
+    // window.addEventListener("keydown", (e) => {
+    //     keysPressed[e.key] = true;
+    //     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key)) {
+    //         e.preventDefault();
+    //     }
+    // });
 
     // Pause, Resume and Reset
     const pause = document.getElementById("Pause");
@@ -884,10 +1112,13 @@ window.addEventListener("DOMContentLoaded", () => {
         player.health = 100;
         player.noOfKeys = 0;
         player.shards = 0;
+        player.shardsDel = 0;
         systemHealth = 51;
 
         for (const tower of towers) {
             tower.destroyed = false;
+            tower.health = 100;
+            tower.rebuilding = false;
         }
 
         for (const row of buildings) {
@@ -902,6 +1133,17 @@ window.addEventListener("DOMContentLoaded", () => {
         for (const key of keys) {
             key.captured = false;
         }
+
+        for (const shield of shields) {
+            shield.collected = false;
+        }
+
+        for (const pack of healthPacks) {
+            pack.collected = false;
+        }
+
+        player.x = tileSize * 2;
+        player.y = tileSize * 2;
         drawSaved();
     });
 });
