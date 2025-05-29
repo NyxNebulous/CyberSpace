@@ -26,7 +26,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     let systemHealth = 51;
     let camera = { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
-    const player = { x: X * tileSize + tileSize / 2, y: Y * tileSize + 1.1*tileSize / 2, size: 12, color: "white", noOfKeys: 0, step: 3, shards: 0, health: 100, shardsDel: 0 };
+    const player = { x: X * tileSize + tileSize / 2, y: Y * tileSize + 1.1 * tileSize / 2, size: 12, color: "white", noOfKeys: 0, step: 3, shards: 0, health: 100, shardsDel: 0 };
     let buildings = [];
     let towers = [];
     let bullets = [];
@@ -618,7 +618,7 @@ window.addEventListener("DOMContentLoaded", () => {
             const shield = new Shield();
             shields.push({ shield: shield, collected: false });
         }
-        
+
         for (let i = 0; i < 4; i++) {
             const booster = new SpeedBooster();
             speedBoosters.push({ booster: booster, collected: false });
@@ -1087,14 +1087,6 @@ window.addEventListener("DOMContentLoaded", () => {
         drawSaved();
     });
 
-    //stops browser from scrolling
-    // window.addEventListener("keydown", (e) => {
-    //     keysPressed[e.key] = true;
-    //     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key)) {
-    //         e.preventDefault();
-    //     }
-    // });
-
     // Pause, Resume and Reset
     const pause = document.getElementById("Pause");
     const resume = document.getElementById("Resume");
@@ -1114,6 +1106,10 @@ window.addEventListener("DOMContentLoaded", () => {
         player.shards = 0;
         player.shardsDel = 0;
         systemHealth = 51;
+        player.health = 100;
+        player.x = X * tileSize + tileSize / 2;
+        player.y = Y * tileSize + 1.1 * tileSize / 2;
+        updateCamera();
 
         for (const tower of towers) {
             tower.destroyed = false;
@@ -1142,8 +1138,18 @@ window.addEventListener("DOMContentLoaded", () => {
             pack.collected = false;
         }
 
-        player.x = tileSize * 2;
-        player.y = tileSize * 2;
+        bullets = [];
+        hostage = [];
+        cooldown = 0;
+        
+        for(const bot of bots){
+            bot.chasing = false;
+            bot.dead = false;
+            bot.health = 100;
+            bot.x = hubX * tileSize;
+            bot.y = hubY * tileSize;
+        }
+
         drawSaved();
     });
 });
