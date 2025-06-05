@@ -614,7 +614,7 @@ window.addEventListener("DOMContentLoaded", () => {
             const bot = new SniperBot();
             bots.push(bot);
         }
-        console.log(bots);
+        
         for (let i = 0; i < 7; i++) {
             const pack = new HealthPack();
             healthPacks.push({ pack: pack, collected: false });
@@ -990,20 +990,10 @@ window.addEventListener("DOMContentLoaded", () => {
         camera.x = Math.max(0, Math.min(camera.x, canvas.width - camera.width));
         camera.y = Math.max(0, Math.min(camera.y, canvas.height - camera.height));
     }
-    let lastTime = performance.now();
-    let frameCount = 0;
 
     function animate() {
         requestAnimationFrame(animate);
-        const now = performance.now();
-        frameCount++;
-
-        if (now - lastTime >= 1000) {
-            console.log("FPS:", frameCount);
-            frameCount = 0;
-            lastTime = now;
-        }
-
+        
         if (isPaused) return;
 
         updateCamera();
